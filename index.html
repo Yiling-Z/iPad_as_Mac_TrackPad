@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+    <style>
+        body { 
+            background: #1a1a1a; 
+            color: #fff; 
+
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            padding: 20px;
+            margin: 0;
+        }
+        #ip-input {
+            width: 80%;
+            padding: 12px;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            background: #333;
+            color: #fff;
+        }
+        #connect-btn {
+            padding: 12px 24px;
+            font-size: 18px;
+            background: #007aff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        #pad {
+            height: 70vh;
+            background: #2d2d2d;
+            border-radius: 12px;
+            margin: 10px 0;
+            touch-action: none; 
+        }
+        #status {
+            margin-top: 15px;
+            font-size: 16px;
+            color: #ccc;
+        }
+        .tips {
+            font-size: 14px;
+            color: #999;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <input type="text" id="ip-input" placeholder="Enter the local network IP address of the Mac" value="192.168.0.109">
+    <button id="connect-btn">connect Mac</button>
+    <div id="pad">Torch bar</div>
+    <div id="status">waiting to be connected</div>
+    <div class="tips">Operation Instructions: Click = Left Button | Long press = Right Button | Two-finger swipe = Scroll</div>
+
+    <script>
+        let socket;
+        let lastX, lastY;
+        let isLongPress = false;
+        let longPressTimer = null;
+        const ipInput = document.getElementById('ip-input');
+        const connectBtn = document.getElementById('connect-btn');
+        const pad = document.getElementById('pad');
+        const statusText = document.getElementById('status');
+
+        connectBtn.addEventListener('click', () => {
+            const macIp = ipInput.value.trim();
+            if (!macIp) {
+                alert('Please enter the local IP address of the Mac！');
+                return;
+            }
+
+            if (socket) {
+                socket.close();
+            }
+
+            socket = new WebSocket(`ws://${macIp}:8888`);
+            
+            socket.onopen = () => {
+                statusText.textContent = `Connected：${macIp}:8888`;
+                statusText.style.color = '#34c759'; //vert
+            };
+
+            socket.onerror = (e) => {
+                statusText.textContent = `Connection failed`;
+                statusText.style.color = '#ff3b30'; //rouge
+            };
+
+            socket.onclose = () => {
+                statusText.textContent = 'Disconnected';
+                statusText.style.color = '#ff9500'; //orange
+            };
+        });
+
+
+        pad.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                alert('Please connect the Mac！');
+                return;
+            }
+
+            const t = e.touches[0];
+            lastX = t.clientX;
+            lastY = t.clientY;
+
+
+            isLongPress = false;
+            longPressTimer = setTimeout(() => {
+                isLongPress = true;
+                socket.send('right');
+                statusText.textContent = 'right button is on';
+            }, 500);
+        });
+
+
+        pad.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!socket || socket.readyState !== WebSocket.OPEN || isLongPress) {
+                return;
+            }
+
+            const t = e.touches[0];
+            const dx = t.clientX - lastX;
+            const dy = t.clientY - lastY;
+            lastX = t.clientX;
+            lastY = t.clientY;
+
+
+            if (e.touches.length === 2) {
+                socket.send(`scroll ${dy * -1}`);
+            } else {
+                socket.send(`move ${dx} ${dy}`);
+            }
+        });
+
+        pad.addEventListener('touchend', (e) => {
+            clearTimeout(longPressTimer);
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                return;
+            }
+
+            if (!isLongPress) {
+                socket.send('click');
+                statusText.textContent = 'left button is on';
+            }
+            isLongPress = false;
+        });
+
+        document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
+    </script>
+</body>
+</html>
