@@ -10,7 +10,7 @@
             font-family: -apple-system, BlinkMacSystemFont, sans-serif; 
             padding: 20px;
             margin: 0;
-            overflow: hidden; /* 禁用页面滚动，避免干扰 */
+            overflow: hidden;
         }
         #ip-input {
             width: 80%;
@@ -37,7 +37,7 @@
             background: #2d2d2d;
             border-radius: 12px;
             margin: 10px 0;
-            touch-action: none; /* 完全禁用浏览器触摸行为 */
+            touch-action: none;
             position: relative;
         }
         #status {
@@ -62,36 +62,31 @@
     <script>
         let socket;
         let isConnected = false;
-        let padRect; // 触控区域的坐标信息（核心：基于区域计算位移）
+        let padRect;
         let lastTouchX = 0;
         let lastTouchY = 0;
         let isSliding = false;
         let isLongPress = false;
         let longPressTimer = null;
 
-        // 核心防抖/精准参数
-        const SLIDE_THRESHOLD = 3;    // 滑动判定阈值（3px，更小更精准）
-        const LONG_PRESS_TIME = 500;  // 长按时间
-        const MIN_SEND_DELTA = 0.5;   // 最小发送位移（小于0.5px不发送，防抖）
-        const SEND_INTERVAL = 16;     // 发送频率（60帧/秒，和屏幕刷新率对齐）
-        let lastSendTime = 0;         // 上次发送时间（节流）
 
-        // DOM元素
+        const SLIDE_THRESHOLD = 3;    
+        const LONG_PRESS_TIME = 500;  
+        const MIN_SEND_DELTA = 0.5;   
+        const SEND_INTERVAL = 16;    
+        let lastSendTime = 0;         
+
         const ipInput = document.getElementById('ip-input');
         const connectBtn = document.getElementById('connect-btn');
         const pad = document.getElementById('pad');
         const statusText = document.getElementById('status');
 
-        // 初始化：获取触控区域坐标（避免全局坐标误差）
         function initPadRect() {
             padRect = pad.getBoundingClientRect();
         }
-        // 窗口大小变化时重新获取（适配旋转）
         window.addEventListener('resize', initPadRect);
-        // 页面加载时初始化
         window.addEventListener('load', initPadRect);
 
-        // 1. 连接WebSocket
         connectBtn.addEventListener('click', () => {
             const macIp = ipInput.value.trim();
             if (!macIp) {
@@ -106,7 +101,7 @@
                 isConnected = true;
                 statusText.textContent = `已连接：${macIp}:8888`;
                 statusText.style.color = '#34c759';
-                initPadRect(); // 连接后重新获取触控区域坐标
+                initPadRect(); 
             };
 
             socket.onerror = () => {
@@ -122,7 +117,6 @@
             };
         });
 
-        // 2. 触摸开始：初始化状态
         pad.addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (!isConnected) {
@@ -130,17 +124,14 @@
                 return;
             }
 
-            // 重置所有状态
             isSliding = false;
             isLongPress = false;
             lastSendTime = 0;
 
-            // 记录触控区域内的相对坐标（核心：避免全局坐标误差）
             const touch = e.touches[0];
             lastTouchX = touch.clientX - padRect.left;
             lastTouchY = touch.clientY - padRect.top;
 
-            // 长按计时器
             longPressTimer = setTimeout(() => {
                 isLongPress = true;
                 socket.send('right');
@@ -148,44 +139,36 @@
             }, LONG_PRESS_TIME);
         });
 
-        // 3. 触摸滑动：精准位移计算（核心修复漂移）
         pad.addEventListener('touchmove', (e) => {
             e.preventDefault();
             if (!isConnected || isLongPress) return;
 
             const now = Date.now();
-            // 节流：60帧/秒发送，避免高频触发导致漂移
             if (now - lastSendTime < SEND_INTERVAL) return;
 
             const touch = e.touches[0];
-            // 计算触控区域内的相对位移（仅基于触控板区域，无全局误差）
             const currentX = touch.clientX - padRect.left;
             const currentY = touch.clientY - padRect.top;
             let dx = currentX - lastTouchX;
             let dy = currentY - lastTouchY;
 
-            // 更新上次触摸位置
             lastTouchX = currentX;
             lastTouchY = currentY;
 
-            // 防抖：过滤微小位移（小于0.5px不发送）
             if (Math.abs(dx) < MIN_SEND_DELTA && Math.abs(dy) < MIN_SEND_DELTA) return;
 
-            // 判定滑动（超过阈值）
             const distance = Math.sqrt(dx*dx + dy*dy);
             if (distance > SLIDE_THRESHOLD) {
                 isSliding = true;
-                clearTimeout(longPressTimer); // 滑动取消长按
+                clearTimeout(longPressTimer); 
             }
 
-            // 双指滚动
             if (e.touches.length === 2) {
                 socket.send(`scroll ${dy * -1}`);
                 statusText.textContent = '滚动中';
             }
-            // 单指移动（仅滑动时发送）
+
             else if (isSliding) {
-                // 位移归一化：适配不同iPad屏幕尺寸，减少漂移
                 dx = dx / padRect.width * 100;
                 dy = dy / padRect.height * 100;
                 socket.send(`move ${dx} ${dy}`);
@@ -195,13 +178,11 @@
             lastSendTime = now;
         });
 
-        // 4. 触摸结束：精准判定点击/滑动
         pad.addEventListener('touchend', (e) => {
             e.preventDefault();
             if (!isConnected) return;
 
             clearTimeout(longPressTimer);
-            // 仅轻触（未滑动）触发左键
             if (!isSliding && !isLongPress) {
                 socket.send('click');
                 statusText.textContent = '左键点击';
@@ -209,12 +190,10 @@
                 statusText.textContent = '滑动结束（无点击）';
             }
 
-            // 重置状态
             isSliding = false;
             isLongPress = false;
         });
 
-        // 禁用所有默认触摸行为，避免干扰
         document.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
     </script>
 </body>
